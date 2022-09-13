@@ -17,8 +17,8 @@ namespace PushNotify.Api.Models
         public int Id { get; set; }
         public int ClientId { get;set; }
         public string Endpoint { get;set; }
-        public string P256dh { get;set; }
-        public string Auth { get;set; }
+        public string? P256dh { get;set; }
+        public string? Auth { get;set; }
         
         [ForeignKey(nameof(ClientId))]
         public Client? Client {get;set;}

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PushNotify.Api.Db;
@@ -19,6 +20,7 @@ public class PushController : Controller
     }
 
     [HttpPost]
+    [EnableCors]
     public async Task<IActionResult> AddClient(string clientName)
     {
         var vapid = configuration["VAPID:publicKey"];
@@ -38,35 +40,37 @@ public class PushController : Controller
     }
 
     [HttpPost("{client:alpha}")]
+    [EnableCors]
     public async Task<IActionResult> Register(string client, Subscription model) {
         var vapid = configuration["VAPID:publicKey"];
-        if (model.Client == null)
+        if (client == null)
         {
             return BadRequest("No Client Name parsed.");
         }
-        if (_dbContext.Clients.Any(x => x.Name == client))
+        if (!_dbContext.Clients.Any(x => x.Name == client))
         {
-            return BadRequest("Client Name already used.");
+            return BadRequest("Client Not Found");
         }
 
         var clientId = (await _dbContext.Clients.FirstAsync(x=>x.Name == client)).Id;
         model.ClientId = clientId;
         _dbContext.Subscriptions.Add(model);
         await _dbContext.SaveChangesAsync();
-        return Ok();
+        return Ok(model);
     }
 
     [HttpPost]
+    [EnableCors]
     public async Task<IActionResult> Notify(string message, string client)
     {
         if (client == null)
         {
             return BadRequest("No Client Name parsed.");
         }
-        var subscription = await _dbContext.Subscriptions.FirstOrDefaultAsync(x=> x.Client.Name == client);
-        if (subscription == null)
+        var subscriptions = await _dbContext.Subscriptions.Where(x=> x.Client.Name == client).ToListAsync();
+        if (subscriptions.Count() == 0)
         {
-            return BadRequest("Client was not found");
+            return BadRequest("No Subscription Found");
         }
 
         var subject = configuration["VAPID:subject"];
@@ -78,8 +82,10 @@ public class PushController : Controller
         var webPushClient = new WebPushClient();
         try
         {
-            var objectToSend = new PushSubscription(subscription.Endpoint,subscription.P256dh,subscription.Auth);
-            webPushClient.SendNotification(objectToSend, message, vapidDetails);
+            foreach(var subscription in subscriptions) {
+                var objectToSend = new PushSubscription(subscription.Endpoint,subscription.P256dh,subscription.Auth);
+                webPushClient.SendNotification(objectToSend, message, vapidDetails);
+            }
         }
         catch (Exception exception)
         {
